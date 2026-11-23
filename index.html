@@ -1,0 +1,553 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Nahuel</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap">
+<style>
+  /* Catálogo de productos: barra superior fija, grilla de tarjetas, panel de carga con clave */
+  :root{
+    --bg:#f6f5f3; --surface:#ffffff; --ink:#1b1a19; --muted:#76726c; --line:#e7e4df;
+    --accent:#d6294b; --accent-ink:#ffffff; --ok:#0f9d58; --ok-bg:#e7f6ee; --off:#8a8a8a; --off-bg:#eeece8;
+    --shadow:0 1px 2px rgba(0,0,0,.04),0 6px 20px rgba(0,0,0,.05);
+    --f-head:"Space Grotesk",system-ui,sans-serif; --f-body:"Inter",system-ui,sans-serif;
+  }
+  @media (prefers-color-scheme:dark){ :root:not([data-theme="light"]){
+    --bg:#141312; --surface:#1d1b1a; --ink:#f3f0ea; --muted:#a59f97; --line:#2c2a28;
+    --accent:#ff5d7a; --accent-ink:#1b1a19; --ok:#33c27f; --ok-bg:#16281f; --off:#9a948c; --off-bg:#262321;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 20px rgba(0,0,0,.4); color-scheme:dark;
+  }}
+  :root[data-theme="dark"]{
+    --bg:#141312; --surface:#1d1b1a; --ink:#f3f0ea; --muted:#a59f97; --line:#2c2a28;
+    --accent:#ff5d7a; --accent-ink:#1b1a19; --ok:#33c27f; --ok-bg:#16281f; --off:#9a948c; --off-bg:#262321;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 20px rgba(0,0,0,.4); color-scheme:dark;
+  }
+  *{box-sizing:border-box}
+  body{background:var(--bg); color:var(--ink); font-family:var(--f-body); margin:0; line-height:1.45}
+  body::before{content:""; position:fixed; inset:0 0 auto; height:env(safe-area-inset-top,0px); z-index:20; background:var(--surface)}
+  a{color:inherit}
+  h1,h2,h3{font-family:var(--f-head); margin:0}
+
+  /* Barra superior */
+  header{position:sticky; top:env(safe-area-inset-top,0px); z-index:15; background:var(--surface); border-bottom:1px solid var(--line)}
+  .bar{display:flex; align-items:center; justify-content:space-between; gap:12px;
+    padding-block:12px; padding-left:max(16px,env(safe-area-inset-left,0px)); padding-right:max(16px,env(safe-area-inset-right,0px));
+    max-width:1100px; margin:0 auto}
+  .brand{display:flex; align-items:baseline; gap:8px}
+  .brand .logo{font-family:var(--f-head); font-weight:700; font-size:22px; letter-spacing:-.02em}
+  .brand .logo b{color:var(--accent)}
+  .brand .tag{font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.08em}
+  nav{display:flex; gap:4px; background:var(--bg); border:1px solid var(--line); border-radius:999px; padding:3px}
+  nav button{font-family:var(--f-body); font-size:13px; font-weight:600; color:var(--muted); background:transparent;
+    border:0; padding:7px 14px; border-radius:999px; cursor:pointer}
+  nav button[aria-selected="true"]{background:var(--surface); color:var(--ink); box-shadow:var(--shadow)}
+
+  main{max-width:1100px; margin:0 auto;
+    padding-block:22px 48px; padding-left:max(16px,env(safe-area-inset-left,0px)); padding-right:max(16px,env(safe-area-inset-right,0px))}
+
+  /* Catálogo */
+  .heading{display:flex; align-items:flex-end; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:18px}
+  .heading h2{font-size:clamp(22px,4vw,30px); letter-spacing:-.02em}
+  .heading p{margin:4px 0 0; color:var(--muted); font-size:14px}
+  .count{font-size:13px; color:var(--muted); font-variant-numeric:tabular-nums}
+  .grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:16px}
+  .card{background:var(--surface); border:1px solid var(--line); border-radius:14px; overflow:hidden;
+    box-shadow:var(--shadow); display:flex; flex-direction:column; cursor:pointer; text-align:left; padding:0; font:inherit; color:inherit}
+  .card .ph{position:relative; aspect-ratio:4/5; background:var(--bg); overflow:hidden}
+  .card .ph img{width:100%; height:100%; object-fit:cover; display:block}
+  .badge{position:absolute; top:8px; left:8px; font-size:11px; font-weight:600; padding:3px 9px; border-radius:999px}
+  .badge.ok{background:var(--ok-bg); color:var(--ok)}
+  .badge.off{background:var(--off-bg); color:var(--off)}
+  .ej{position:absolute; top:8px; right:8px; font-size:10px; font-weight:600; letter-spacing:.04em; text-transform:uppercase;
+    background:rgba(0,0,0,.55); color:#fff; padding:2px 7px; border-radius:6px}
+  .card .body{padding:11px 12px 13px; display:flex; flex-direction:column; gap:3px}
+  .card .nombre{font-weight:600; font-size:14.5px; line-height:1.25}
+  .card .precio{font-family:var(--f-head); font-weight:700; font-size:17px; color:var(--accent); font-variant-numeric:tabular-nums}
+  .card .precio.sin{color:var(--muted); font-size:14px; font-weight:600}
+  .empty{border:1px dashed var(--line); border-radius:14px; padding:48px 20px; text-align:center; color:var(--muted)}
+  .empty b{color:var(--ink); font-family:var(--f-head)}
+
+  /* Panel de carga */
+  .lock{max-width:360px; margin:40px auto; background:var(--surface); border:1px solid var(--line); border-radius:16px;
+    box-shadow:var(--shadow); padding:28px 24px; text-align:center}
+  .lock h2{font-size:20px; margin-bottom:6px}
+  .lock p{color:var(--muted); font-size:13.5px; margin:0 0 18px}
+  .panel{display:grid; grid-template-columns:1fr 1fr; gap:26px; align-items:start}
+  @media (max-width:760px){ .panel{grid-template-columns:1fr} }
+  .form{background:var(--surface); border:1px solid var(--line); border-radius:16px; box-shadow:var(--shadow); padding:20px}
+  .form h3{font-size:16px; margin-bottom:14px}
+  label{display:block; font-size:12px; font-weight:600; color:var(--muted); margin:0 0 5px; text-transform:uppercase; letter-spacing:.04em}
+  input,textarea,select{width:100%; font:inherit; font-size:14px; color:var(--ink); background:var(--bg);
+    border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin-bottom:14px}
+  textarea{resize:vertical; min-height:68px}
+  input:focus,textarea:focus,select:focus{outline:2px solid var(--accent); outline-offset:1px; border-color:transparent}
+  .drop{border:1.5px dashed var(--line); border-radius:12px; padding:16px; text-align:center; color:var(--muted);
+    font-size:13px; cursor:pointer; background:var(--bg); margin-bottom:14px}
+  .drop.has{padding:0; border-style:solid; overflow:hidden}
+  .drop img{width:100%; max-height:240px; object-fit:cover; display:block}
+  .row2{display:grid; grid-template-columns:1fr 1fr; gap:12px}
+  .btn{font-family:var(--f-body); font-weight:600; font-size:14px; border:0; border-radius:10px; padding:11px 16px; cursor:pointer}
+  .btn.primary{background:var(--accent); color:var(--accent-ink); width:100%}
+  .btn.ghost{background:var(--bg); color:var(--ink); border:1px solid var(--line)}
+  .btn:disabled{opacity:.55; cursor:default}
+  a.btn{display:inline-block; text-align:center; text-decoration:none}
+  .btn.wa{background:#1fa855; color:#fff}
+  .heading .btn.wa{padding:8px 14px; font-size:13px}
+  .listado h3{font-size:16px; margin-bottom:12px; display:flex; justify-content:space-between; align-items:center}
+  .item{display:flex; gap:12px; align-items:center; background:var(--surface); border:1px solid var(--line);
+    border-radius:12px; padding:9px; margin-bottom:10px}
+  .item img{width:52px; height:52px; border-radius:8px; object-fit:cover; background:var(--bg); flex-shrink:0}
+  .item .info{min-width:0; flex:1}
+  .item .info .n{font-weight:600; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .item .info .p{font-size:13px; color:var(--muted); font-variant-numeric:tabular-nums}
+  .item .acts{display:flex; gap:6px; flex-shrink:0}
+  .iconbtn{border:1px solid var(--line); background:var(--bg); color:var(--ink); border-radius:8px; padding:6px 10px;
+    font-size:12.5px; font-weight:600; cursor:pointer}
+  .iconbtn.del{color:var(--accent)}
+  .hint{font-size:12px; color:var(--muted); margin:2px 0 14px}
+  .share{display:flex; gap:8px; align-items:center; margin-top:4px}
+
+  /* Modal detalle */
+  .modal{position:fixed; inset:0; z-index:40; background:rgba(0,0,0,.55); display:flex; align-items:center; justify-content:center; padding:18px}
+  .modal .box{background:var(--surface); border-radius:16px; max-width:460px; width:100%; max-height:90vh; overflow:auto; box-shadow:var(--shadow)}
+  .modal .box img{width:100%; max-height:52vh; object-fit:cover; display:block; background:var(--bg)}
+  .modal .box .c{padding:18px 20px 22px}
+  .modal .box .c .top{display:flex; justify-content:space-between; align-items:flex-start; gap:10px}
+  .modal .box h3{font-size:20px}
+  .modal .box .pr{font-family:var(--f-head); font-weight:700; font-size:22px; color:var(--accent); font-variant-numeric:tabular-nums; margin-top:4px}
+  .modal .box .desc{margin-top:12px; color:var(--muted); font-size:14px; white-space:pre-wrap}
+  .x{border:0; background:var(--bg); color:var(--ink); width:34px; height:34px; border-radius:999px; font-size:18px; cursor:pointer; flex-shrink:0}
+  .toast{position:fixed; left:50%; bottom:22px; transform:translateX(-50%); background:var(--ink); color:var(--bg);
+    padding:10px 18px; border-radius:999px; font-size:13.5px; font-weight:500; z-index:60; box-shadow:var(--shadow)}
+  .foot{margin-top:40px; padding-top:18px; border-top:1px solid var(--line); color:var(--muted); font-size:12.5px; text-align:center}
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <div class="brand">
+      <span class="logo">Nah<b>uel</b></span>
+      <span class="tag">Productos</span>
+    </div>
+    <nav>
+      <button id="navCat" aria-selected="true">Catálogo</button>
+      <button id="navLoad" aria-selected="false">Cargar</button>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <!-- CATÁLOGO -->
+  <section id="vCat">
+    <div class="heading">
+      <div>
+        <h2>Catálogo</h2>
+        <p>Productos disponibles. Tocá uno para ver el detalle.</p>
+      </div>
+      <div style="display:flex; align-items:center; gap:12px">
+        <span class="count" id="cat-count"></span>
+        <a id="cat-wa" class="btn wa" hidden target="_blank" rel="noopener">Consultar por WhatsApp</a>
+      </div>
+    </div>
+    <div class="grid" id="cat-grid"></div>
+  </section>
+
+  <!-- CARGA -->
+  <section id="vLoad" hidden>
+    <!-- gate -->
+    <div class="lock" id="gate">
+      <h2>Panel de carga</h2>
+      <p>Ingresá la clave para subir o editar productos.</p>
+      <input id="clave" type="password" placeholder="Clave" autocomplete="off" style="text-align:center">
+      <button class="btn primary" id="entrar">Entrar</button>
+    </div>
+
+    <!-- panel -->
+    <div class="panel" id="panel" hidden>
+      <div class="form">
+        <h3 id="form-title">Nuevo producto</h3>
+        <label>Foto del producto</label>
+        <div class="drop" id="drop">
+          <span id="drop-text">Tocá para elegir una foto</span>
+          <input id="file" type="file" accept="image/*" hidden>
+        </div>
+        <label for="nombre">Nombre</label>
+        <input id="nombre" type="text" placeholder="Ej: Zapatillas urbanas" autocomplete="off">
+        <div class="row2">
+          <div>
+            <label for="precio">Precio</label>
+            <input id="precio" type="text" inputmode="decimal" placeholder="$ 0">
+          </div>
+          <div>
+            <label for="estado">Estado</label>
+            <select id="estado">
+              <option value="Disponible">Disponible</option>
+              <option value="Vendido">Vendido</option>
+            </select>
+          </div>
+        </div>
+        <label for="descripcion">Descripción (opcional)</label>
+        <textarea id="descripcion" placeholder="Detalles, talles, color, etc."></textarea>
+        <button class="btn primary" id="guardar">Guardar producto</button>
+        <button class="btn ghost" id="cancelar" hidden style="width:100%;margin-top:8px">Cancelar edición</button>
+      </div>
+
+      <div class="listado">
+        <h3>Cargados <span class="count" id="load-count"></span></h3>
+        <div class="hint">Cada producto aparece en el catálogo apenas lo guardás.</div>
+        <div id="load-list"></div>
+        <label for="tel" style="margin-top:8px">Teléfono de contacto (WhatsApp)</label>
+        <input id="tel" type="text" inputmode="tel" placeholder="Ej: 549 351 555 1234" autocomplete="off">
+        <div class="hint">Aparece como botón “Consultar por WhatsApp” en cada producto disponible. Escribí el número con característica (ej: 223 555-1234) y apretá Enter: se guarda para todos.</div>
+        <div class="share">
+          <button class="btn ghost" id="compartir">Compartir catálogo</button>
+          <span class="hint" style="margin:0">Copia el link para mandar por WhatsApp.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="foot" id="foot"></div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script>
+(function(){
+  "use strict";
+
+  /* ======================= CONFIGURACIÓN ======================= */
+  /* Para publicar en Render + Supabase, completá estos tres valores.
+     Si quedan vacíos, la página funciona en MODO DEMO (guarda en este
+     navegador, no se comparte). Ver la guía de instalación. */
+  var CONFIG = {
+    SUPABASE_URL: "https://mawipdlrovbxomfzgfpa.supabase.co",
+    SUPABASE_KEY: "sb_publishable_z31FGBDtPblNwN3C-mqMlw_Dd8DgP1n",
+    CLAVE: "Ventas.Nahuel26", // clave para entrar al panel de Cargar
+    TELEFONO: ""          // el WhatsApp lo carga Nahuel desde el panel Cargar
+  };
+  /* ============================================================= */
+
+  var $ = function(id){ return document.getElementById(id); };
+  var usaSupabase = !!(CONFIG.SUPABASE_URL && CONFIG.SUPABASE_KEY && window.supabase);
+  var sb = usaSupabase ? window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY) : null;
+  var DEMO_KEY = "nahuel_productos";
+  var TEL_KEY = "nahuel_tel";
+
+  /* El WhatsApp se guarda en Supabase (tabla "ajustes"): lo cambia Nahuel
+     desde el panel Cargar y les cambia a todos. En modo demo queda en el
+     navegador. */
+  var telCache = null;
+  async function cargarTel(){
+    if(!usaSupabase) return;
+    try{
+      var r = await sb.from("ajustes").select("valor").eq("clave","telefono").maybeSingle();
+      telCache = (r.data && r.data.valor) ? r.data.valor : "";
+    }catch(e){ telCache = ""; }
+  }
+  function telActual(){
+    if(usaSupabase) return (telCache||"").trim() || CONFIG.TELEFONO;
+    try{ return (localStorage.getItem(TEL_KEY)||"").trim() || CONFIG.TELEFONO; }
+    catch(e){ return CONFIG.TELEFONO; }
+  }
+  async function telGuardar(v){
+    v = (v||"").trim();
+    if(!usaSupabase){ try{ localStorage.setItem(TEL_KEY, v); }catch(e){} toast("Teléfono guardado"); return; }
+    try{
+      var r = await sb.from("ajustes").upsert({clave:"telefono", valor:v}, {onConflict:"clave"});
+      if(r.error) throw r.error;
+      telCache = v; toast(v ? "WhatsApp guardado para todos" : "WhatsApp borrado");
+    }catch(e){ console.log(e); toast("No se pudo guardar el WhatsApp"); }
+  }
+  // Acepta "223 555-1234", "0223 555 1234", "+54 9 223 5551234"…
+  function telNormal(t){
+    var d = String(t||"").replace(/[^\d]/g,"");
+    if(!d) return "";
+    if(d.indexOf("54")===0) d = d.slice(2);
+    if(d.charAt(0)==="9") d = d.slice(1);
+    if(d.charAt(0)==="0") d = d.slice(1);
+    return "549"+d;
+  }
+  function waLink(p){
+    var tel = telNormal(telActual());
+    if(!tel) return "";
+    var msg = "Hola! Me interesa "+(p && p.nombre ? p.nombre : "un producto")+
+      (p && p.precio!=null && p.precio!=="" ? " ("+pesos(p.precio)+")" : "")+". ¿Está disponible?";
+    return "https://wa.me/"+tel+"?text="+encodeURIComponent(msg);
+  }
+
+  /* ---------- formato de precio ---------- */
+  function pesos(v){
+    if(v==null || v==="" || isNaN(v)) return "A consultar";
+    var n = Number(v);
+    return "$ " + n.toLocaleString("es-AR", {maximumFractionDigits:2});
+  }
+  function numPrecio(txt){
+    if(txt==null) return null;
+    var s = String(txt).replace(/[^\d,.-]/g,"").replace(/\./g,"").replace(",",".");
+    var n = parseFloat(s);
+    return isNaN(n) ? null : n;
+  }
+
+  /* ---------- reducir tamaño de imagen ---------- */
+  function achicar(file){
+    return new Promise(function(res,rej){
+      var r = new FileReader();
+      r.onload = function(){
+        var img = new Image();
+        img.onload = function(){
+          var max = 1100, w = img.width, h = img.height;
+          if(w>h && w>max){ h = Math.round(h*max/w); w = max; }
+          else if(h>=w && h>max){ w = Math.round(w*max/h); h = max; }
+          var c = document.createElement("canvas"); c.width=w; c.height=h;
+          c.getContext("2d").drawImage(img,0,0,w,h);
+          res(c.toDataURL("image/jpeg",0.82));
+        };
+        img.onerror = rej; img.src = r.result;
+      };
+      r.onerror = rej; r.readAsDataURL(file);
+    });
+  }
+  function dataURLaBlob(d){
+    var p = d.split(","), m = p[0].match(/:(.*?);/)[1], b = atob(p[1]), n = b.length, u = new Uint8Array(n);
+    while(n--) u[n] = b.charCodeAt(n);
+    return new Blob([u], {type:m});
+  }
+
+  /* ======================= ALMACENAMIENTO ======================= */
+  var store = usaSupabase ? {
+    async list(){
+      var r = await sb.from("productos").select("*").order("creado",{ascending:false});
+      if(r.error) throw r.error; return r.data || [];
+    },
+    async add(p, dataURL){
+      var url = await subirImg(dataURL);
+      var r = await sb.from("productos").insert([{nombre:p.nombre, precio:p.precio, descripcion:p.descripcion, estado:p.estado, imagen:url}]);
+      if(r.error) throw r.error;
+    },
+    async update(id, p, dataURL){
+      var patch = {nombre:p.nombre, precio:p.precio, descripcion:p.descripcion, estado:p.estado};
+      if(dataURL) patch.imagen = await subirImg(dataURL);
+      var r = await sb.from("productos").update(patch).eq("id",id);
+      if(r.error) throw r.error;
+    },
+    async remove(id){
+      var r = await sb.from("productos").delete().eq("id",id);
+      if(r.error) throw r.error;
+    }
+  } : {
+    _read(){ try{ return JSON.parse(localStorage.getItem(DEMO_KEY)||"[]"); }catch(e){ return []; } },
+    _write(a){ try{ localStorage.setItem(DEMO_KEY, JSON.stringify(a)); }catch(e){} },
+    async list(){ return this._read(); },
+    async add(p, dataURL){
+      var a = this._read();
+      a.unshift({id:Date.now(), nombre:p.nombre, precio:p.precio, descripcion:p.descripcion, estado:p.estado, imagen:dataURL||"", ejemplo:false});
+      this._write(a);
+    },
+    async update(id, p, dataURL){
+      var a = this._read();
+      for(var i=0;i<a.length;i++){ if(a[i].id==id){
+        a[i].nombre=p.nombre; a[i].precio=p.precio; a[i].descripcion=p.descripcion; a[i].estado=p.estado;
+        if(dataURL) a[i].imagen=dataURL; a[i].ejemplo=false;
+      }}
+      this._write(a);
+    },
+    async remove(id){ this._write(this._read().filter(function(x){ return x.id!=id; })); }
+  };
+
+  async function subirImg(dataURL){
+    var blob = dataURLaBlob(dataURL);
+    var nombre = Date.now()+"_"+Math.random().toString(36).slice(2,8)+".jpg";
+    var up = await sb.storage.from("productos").upload(nombre, blob, {contentType:"image/jpeg"});
+    if(up.error) throw up.error;
+    return sb.storage.from("productos").getPublicUrl(nombre).data.publicUrl;
+  }
+
+  /* ---------- semilla de ejemplo (solo modo demo y catálogo vacío) ---------- */
+  function phImg(txt, c1, c2){
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="500">'+
+      '<rect width="400" height="500" fill="'+c1+'"/>'+
+      '<rect x="60" y="150" width="280" height="200" rx="18" fill="'+c2+'"/>'+
+      '<text x="200" y="420" font-family="sans-serif" font-size="26" fill="#ffffff" text-anchor="middle" opacity="0.85">'+txt+'</text></svg>';
+    return "data:image/svg+xml;utf8,"+encodeURIComponent(svg);
+  }
+  async function sembrar(){
+    if(usaSupabase) return;
+    if(store._read().length) return;
+    store._write([
+      {id:1, nombre:"Zapatillas urbanas", precio:45000, descripcion:"Talles 38 al 44. Varios colores.", estado:"Disponible", imagen:phImg("Foto producto","#2c3440","#49586b"), ejemplo:true},
+      {id:2, nombre:"Campera inflable", precio:82000, descripcion:"Abrigada, impermeable. Negro y verde.", estado:"Vendido", imagen:phImg("Foto producto","#3a2f2c","#6b5149"), ejemplo:true},
+      {id:3, nombre:"Mochila de cuero", precio:60000, descripcion:"Cuero genuino, 2 compartimentos.", estado:"Disponible", imagen:phImg("Foto producto","#2b332e","#49664f"), ejemplo:true}
+    ]);
+  }
+
+  /* ======================= UI ======================= */
+  var editId = null, imgNueva = null;
+
+  function toast(msg){
+    var t = document.createElement("div"); t.className="toast"; t.textContent=msg; document.body.appendChild(t);
+    setTimeout(function(){ t.remove(); }, 2200);
+  }
+
+  function tarjeta(p){
+    var b = document.createElement("button"); b.className="card";
+    var est = p.estado==="Vendido" ? '<span class="badge off">Vendido</span>' : '<span class="badge ok">Disponible</span>';
+    var ej = p.ejemplo ? '<span class="ej">Ejemplo</span>' : "";
+    var precio = (p.precio==null||p.precio==="") ? '<span class="precio sin">A consultar</span>' : '<span class="precio">'+pesos(p.precio)+'</span>';
+    b.innerHTML = '<div class="ph">'+est+ej+(p.imagen?'<img src="'+p.imagen+'" alt="">':'')+'</div>'+
+      '<div class="body"><span class="nombre">'+esc(p.nombre||"Sin nombre")+'</span>'+precio+'</div>';
+    b.addEventListener("click", function(){ verDetalle(p); });
+    return b;
+  }
+  function esc(s){ return String(s).replace(/[&<>"]/g,function(c){ return ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[c]; }); }
+
+  async function pintarCatalogo(){
+    var grid = $("cat-grid"); grid.innerHTML="";
+    var items = [];
+    try{ items = await store.list(); }catch(e){ console.log(e); }
+    $("cat-count").textContent = items.length ? (items.length+" producto"+(items.length>1?"s":"")) : "";
+    var waG = waLink(null), waBtn = $("cat-wa");
+    if(waG){ waBtn.href = waG; waBtn.hidden = false; } else { waBtn.hidden = true; }
+    if(!items.length){
+      grid.innerHTML = '<div class="empty" style="grid-column:1/-1"><b>Todavía no hay productos</b><br>Entrá a <b>Cargar</b> para subir el primero.</div>';
+      return;
+    }
+    items.forEach(function(p){ grid.appendChild(tarjeta(p)); });
+  }
+
+  function verDetalle(p){
+    var est = p.estado==="Vendido" ? '<span class="badge off">Vendido</span>' : '<span class="badge ok">Disponible</span>';
+    var wa = (p.estado!=="Vendido") ? waLink(p) : "";
+    var m = document.createElement("div"); m.className="modal";
+    m.innerHTML = '<div class="box">'+(p.imagen?'<img src="'+p.imagen+'" alt="">':'')+
+      '<div class="c"><div class="top"><div><div style="margin-bottom:6px">'+est+'</div><h3>'+esc(p.nombre||"Sin nombre")+'</h3>'+
+      '<div class="pr">'+((p.precio==null||p.precio==="")?"A consultar":pesos(p.precio))+'</div></div>'+
+      '<button class="x" aria-label="Cerrar">×</button></div>'+
+      (p.descripcion?'<div class="desc">'+esc(p.descripcion)+'</div>':'')+
+      (wa?'<a class="btn wa" href="'+wa+'" target="_blank" rel="noopener" style="margin-top:16px;width:100%">Consultar por WhatsApp</a>':'')+
+      '</div></div>';
+    m.addEventListener("click", function(e){ if(e.target===m || e.target.classList.contains("x")) m.remove(); });
+    document.body.appendChild(m);
+  }
+
+  /* ---------- panel de carga ---------- */
+  async function pintarListado(){
+    var box = $("load-list"), items=[];
+    try{ items = await store.list(); }catch(e){}
+    $("load-count").textContent = items.length ? "("+items.length+")" : "";
+    box.innerHTML="";
+    if(!items.length){ box.innerHTML='<div class="hint">Sin productos cargados todavía.</div>'; return; }
+    items.forEach(function(p){
+      var row = document.createElement("div"); row.className="item";
+      row.innerHTML = (p.imagen?'<img src="'+p.imagen+'" alt="">':'<div style="width:52px;height:52px;border-radius:8px;background:var(--bg)"></div>')+
+        '<div class="info"><div class="n">'+esc(p.nombre||"Sin nombre")+'</div>'+
+        '<div class="p">'+((p.precio==null||p.precio==="")?"A consultar":pesos(p.precio))+' · '+esc(p.estado||"")+'</div></div>'+
+        '<div class="acts"><button class="iconbtn" data-ed="'+p.id+'">Editar</button>'+
+        '<button class="iconbtn del" data-del="'+p.id+'">Borrar</button></div>';
+      box.appendChild(row);
+    });
+    box.querySelectorAll("[data-ed]").forEach(function(b){ b.addEventListener("click", function(){ cargarEnForm(b.getAttribute("data-ed")); }); });
+    box.querySelectorAll("[data-del]").forEach(function(b){ b.addEventListener("click", function(){ borrar(b.getAttribute("data-del")); }); });
+  }
+
+  async function cargarEnForm(id){
+    var items = await store.list(), p = items.filter(function(x){ return x.id==id; })[0];
+    if(!p) return;
+    editId = p.id; imgNueva = null;
+    $("form-title").textContent = "Editar producto";
+    $("nombre").value = p.nombre||""; $("precio").value = p.precio!=null ? pesos(p.precio) : "";
+    $("descripcion").value = p.descripcion||""; $("estado").value = p.estado||"Disponible";
+    setDrop(p.imagen);
+    $("cancelar").hidden = false;
+    window.scrollTo({top:0, behavior:"smooth"});
+  }
+  function setDrop(src){
+    var d = $("drop");
+    if(src){ d.classList.add("has"); d.innerHTML = '<img src="'+src+'" alt="">'; }
+    else { d.classList.remove("has"); d.innerHTML = '<span id="drop-text">Tocá para elegir una foto</span>'; }
+    var f = document.createElement("input"); f.type="file"; f.id="file"; f.accept="image/*"; f.hidden=true;
+    d.appendChild(f); f.addEventListener("change", onFile);
+  }
+  function onFile(e){
+    var file = e.target.files && e.target.files[0]; if(!file) return;
+    achicar(file).then(function(d){ imgNueva = d; setDrop(d); }).catch(function(){ toast("No se pudo leer la imagen"); });
+  }
+
+  function limpiar(){
+    editId=null; imgNueva=null; $("form-title").textContent="Nuevo producto";
+    $("nombre").value=""; $("precio").value=""; $("descripcion").value=""; $("estado").value="Disponible";
+    setDrop(null); $("cancelar").hidden=true;
+  }
+
+  async function guardar(){
+    var nombre = $("nombre").value.trim();
+    if(!nombre){ toast("Poné un nombre"); return; }
+    var p = { nombre:nombre, precio:numPrecio($("precio").value), descripcion:$("descripcion").value.trim(), estado:$("estado").value };
+    var btn = $("guardar"); btn.disabled=true; btn.textContent="Guardando…";
+    try{
+      if(editId!=null) await store.update(editId, p, imgNueva);
+      else{
+        if(!imgNueva){ toast("Elegí una foto"); btn.disabled=false; btn.textContent="Guardar producto"; return; }
+        await store.add(p, imgNueva);
+      }
+      limpiar(); await pintarListado(); await pintarCatalogo();
+      toast("Producto guardado");
+    }catch(e){ console.log(e); toast("Error al guardar"); }
+    btn.disabled=false; btn.textContent="Guardar producto";
+  }
+
+  async function borrar(id){
+    var row = document.querySelector('[data-del="'+id+'"]');
+    if(row && row.textContent==="Borrar"){ row.textContent="¿Seguro?"; row.style.color="var(--accent)";
+      setTimeout(function(){ if(row){ row.textContent="Borrar"; } }, 2500); return; }
+    try{ await store.remove(id); await pintarListado(); await pintarCatalogo(); toast("Producto borrado"); }
+    catch(e){ toast("No se pudo borrar"); }
+  }
+
+  /* ---------- navegación ---------- */
+  function mostrar(vista){
+    var cat = vista==="cat";
+    $("vCat").hidden = !cat; $("vLoad").hidden = cat;
+    $("navCat").setAttribute("aria-selected", cat?"true":"false");
+    $("navLoad").setAttribute("aria-selected", cat?"false":"true");
+    if(cat) pintarCatalogo();
+  }
+  var desbloqueado = false;
+  function abrirCarga(){
+    mostrar("load");
+    $("gate").hidden = desbloqueado; $("panel").hidden = !desbloqueado;
+    if(desbloqueado) pintarListado();
+  }
+  function entrar(){
+    if($("clave").value === CONFIG.CLAVE){ desbloqueado=true; $("gate").hidden=true; $("panel").hidden=false; pintarListado(); }
+    else toast("Clave incorrecta");
+  }
+
+  async function compartir(){
+    var url = location.href.split("#")[0];
+    try{ await navigator.clipboard.writeText(url); toast("Link copiado"); }
+    catch(e){ var i=$("precio"); toast("Copiá el link desde la barra del navegador"); }
+  }
+
+  /* ---------- arranque ---------- */
+  $("navCat").addEventListener("click", function(){ mostrar("cat"); });
+  $("navLoad").addEventListener("click", abrirCarga);
+  $("entrar").addEventListener("click", entrar);
+  $("clave").addEventListener("keydown", function(e){ if(e.key==="Enter") entrar(); });
+  $("drop").addEventListener("click", function(e){ if(e.target.tagName!=="INPUT") $("drop").querySelector("#file").click(); });
+  $("guardar").addEventListener("click", guardar);
+  $("cancelar").addEventListener("click", limpiar);
+  $("compartir").addEventListener("click", compartir);
+  $("file").addEventListener("change", onFile);
+  $("tel").addEventListener("change", function(){ telGuardar($("tel").value); });
+  $("tel").addEventListener("keydown", function(e){ if(e.key==="Enter"){ e.preventDefault(); $("tel").blur(); } });
+
+  $("foot").innerHTML = usaSupabase
+    ? "Catálogo de Nahuel · publicado con Render + Supabase"
+    : "Modo demo · los productos se guardan solo en este navegador. Conectá Supabase para compartir el catálogo.";
+
+  (async function(){ await sembrar(); await cargarTel(); $("tel").value = telActual(); await pintarCatalogo(); })();
+})();
+</script>
+</body>
+</html>
