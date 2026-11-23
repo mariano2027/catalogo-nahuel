@@ -139,6 +139,12 @@
   .mover button{border:1px solid var(--line); background:var(--bg); color:var(--ink); border-radius:6px; width:28px; height:22px;
     font-size:11px; line-height:1; cursor:pointer; padding:0}
   .mover button:disabled{opacity:.3; cursor:default}
+  .cats-admin{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px}
+  .cats-admin .chip{cursor:default; display:inline-flex; align-items:center; gap:6px}
+  .cats-admin .chip button{border:0; background:transparent; color:var(--accent); font-weight:700; cursor:pointer; padding:0 2px; font-size:13px}
+  .fila-add{display:flex; gap:8px}
+  .fila-add input{margin:0}
+  .fila-add .btn{flex-shrink:0; padding:9px 14px}
   .foot{margin-top:40px; padding-top:18px; border-top:1px solid var(--line); color:var(--muted); font-size:12.5px; text-align:center}
 </style>
 </head>
@@ -149,7 +155,7 @@
       <span class="logo">Nah<b>uel</b></span>
       <span class="tag">Productos</span>
     </div>
-    <nav>
+    <nav id="nav" hidden>
       <button id="navCat" aria-selected="true">Catálogo</button>
       <button id="navLoad" aria-selected="false">Cargar</button>
     </nav>
@@ -207,8 +213,11 @@
         <label for="nombre">Nombre</label>
         <input id="nombre" type="text" placeholder="Ej: Zapatillas urbanas" autocomplete="off">
         <label for="categoria">Categoría</label>
-        <input id="categoria" type="text" list="cats" placeholder="Elegí una o escribí una nueva" autocomplete="off">
-        <datalist id="cats"></datalist>
+        <select id="categoria"></select>
+        <div class="fila-add" id="catNueva" hidden style="margin:-6px 0 14px">
+          <input id="catNuevaTxt" type="text" placeholder="Nombre de la categoría nueva" autocomplete="off">
+          <button class="btn ghost" id="catNuevaOk" type="button">Agregar</button>
+        </div>
         <div class="row2">
           <div>
             <label for="precio">Precio</label>
@@ -232,11 +241,19 @@
         <h3>Cargados <span class="count" id="load-count"></span></h3>
         <div class="hint">Cada producto aparece en el catálogo apenas lo guardás. Con ▲ ▼ elegís en qué orden se muestran.</div>
         <div id="load-list"></div>
+        <label style="margin-top:8px">Categorías</label>
+        <div class="cats-admin" id="catsAdmin"></div>
+        <div class="fila-add" style="margin-bottom:6px">
+          <input id="catAdd" type="text" placeholder="Nueva categoría (ej: Ropa)" autocomplete="off">
+          <button class="btn ghost" id="catAddOk" type="button">Agregar</button>
+        </div>
+        <div class="hint">Son las que aparecen en el desplegable al cargar y como botones en el catálogo.</div>
         <label for="tel" style="margin-top:8px">Teléfono de contacto (WhatsApp)</label>
         <input id="tel" type="text" inputmode="tel" placeholder="Ej: 549 351 555 1234" autocomplete="off">
         <div class="hint">Aparece como botón “Consultar por WhatsApp” en cada producto disponible. Escribí el número con característica (ej: 223 555-1234) y apretá Enter: se guarda para todos.</div>
         <div class="share">
           <button class="btn ghost" id="compartir">Compartir catálogo</button>
+          <button class="btn ghost" id="salir" type="button">Salir</button>
           <span class="hint" style="margin:0">Copia el link para mandar por WhatsApp.</span>
         </div>
       </div>
@@ -294,6 +311,60 @@
       telCache = v; toast(v ? "WhatsApp guardado para todos" : "WhatsApp borrado");
     }catch(e){ console.log(e); toast("No se pudo guardar el WhatsApp"); }
   }
+  /* Lista de categorías: se guarda en "ajustes" (clave "categorias") como
+     texto JSON. Las que ya usan los productos se suman solas. */
+  var CATS_KEY = "nahuel_categorias", listaCats = [];
+  async function cargarCats(){
+    var v = "";
+    if(usaSupabase){
+      try{ var r = await sb.from("ajustes").select("valor").eq("clave","categorias").maybeSingle(); v = r.data && r.data.valor || ""; }catch(e){}
+    } else { try{ v = localStorage.getItem(CATS_KEY)||""; }catch(e){} }
+    try{ listaCats = JSON.parse(v||"[]"); }catch(e){ listaCats = []; }
+  }
+  async function guardarCats(){
+    var v = JSON.stringify(listaCats);
+    if(!usaSupabase){ try{ localStorage.setItem(CATS_KEY, v); }catch(e){} return true; }
+    var r = await sb.from("ajustes").upsert({clave:"categorias", valor:v}, {onConflict:"clave"});
+    if(r.error){ console.log(r.error); toast("No se pudo guardar la categoría"); return false; }
+    return true;
+  }
+  function todasCats(){
+    var m = {}; listaCats.forEach(function(c){ m[c.toLowerCase()] = c; });
+    (window.__prods||[]).forEach(function(p){ var c=(p.categoria||"").trim(); if(c && !m[c.toLowerCase()]) m[c.toLowerCase()] = c; });
+    return Object.keys(m).map(function(k){ return m[k]; }).sort(function(a,b){ return a.localeCompare(b,"es"); });
+  }
+  async function agregarCat(nombre){
+    nombre = String(nombre||"").trim().replace(/\s+/g," ");
+    if(!nombre) return null;
+    nombre = nombre.charAt(0).toUpperCase()+nombre.slice(1);
+    var ya = todasCats().filter(function(c){ return c.toLowerCase()===nombre.toLowerCase(); })[0];
+    if(ya){ if(listaCats.indexOf(ya)<0){ listaCats.push(ya); await guardarCats(); } return ya; }
+    listaCats.push(nombre);
+    if(!(await guardarCats())){ listaCats.pop(); return null; }
+    toast("Categoría agregada"); return nombre;
+  }
+  async function quitarCat(nombre){
+    var n = (window.__prods||[]).filter(function(p){ return (p.categoria||"")===nombre; }).length;
+    if(n){ toast("Tiene "+n+" producto"+(n>1?"s":"")+": cambiales la categoría antes de borrarla"); return; }
+    listaCats = listaCats.filter(function(c){ return c!==nombre; });
+    await guardarCats(); pintarCats(); pintarChips(); toast("Categoría borrada");
+  }
+  function pintarCats(){
+    var sel = $("categoria"), actual = sel.value, cats = todasCats();
+    sel.innerHTML = '<option value="">Sin categoría</option>'+
+      cats.map(function(c){ return '<option>'+esc(c)+'</option>'; }).join("")+
+      '<option value="__nueva">+ Nueva categoría…</option>';
+    if(actual && actual!=="__nueva" && cats.indexOf(actual)>=0) sel.value = actual;
+    var box = $("catsAdmin");
+    box.innerHTML = cats.length ? "" : '<span class="hint" style="margin:0">Todavía no hay categorías.</span>';
+    cats.forEach(function(c){
+      var ch = document.createElement("span"); ch.className="chip";
+      ch.innerHTML = esc(c)+'<button type="button" aria-label="Borrar '+esc(c)+'">✕</button>';
+      ch.querySelector("button").addEventListener("click", function(){ quitarCat(c); });
+      box.appendChild(ch);
+    });
+  }
+
   // Acepta "223 555-1234", "0223 555 1234", "+54 9 223 5551234"…
   function telNormal(t){
     var d = String(t||"").replace(/[^\d]/g,"");
@@ -495,6 +566,7 @@
   }
   async function pintarCatalogo(){
     try{ todos = await store.list(); }catch(e){ console.log(e); todos = []; }
+    window.__prods = todos;
     var waG = waLink(null), waBtn = $("cat-wa");
     if(waG){ waBtn.href = waG; waBtn.hidden = false; } else { waBtn.hidden = true; }
     pintarChips(); pintarGrilla();
@@ -539,8 +611,7 @@
     box.querySelectorAll("[data-del]").forEach(function(b){ b.addEventListener("click", function(){ borrar(b.getAttribute("data-del")); }); });
     box.querySelectorAll("[data-up]").forEach(function(b){ b.addEventListener("click", function(){ mover(items, +b.getAttribute("data-up"), -1); }); });
     box.querySelectorAll("[data-down]").forEach(function(b){ b.addEventListener("click", function(){ mover(items, +b.getAttribute("data-down"), 1); }); });
-    var dl = $("cats"); dl.innerHTML = "";
-    categorias(items).forEach(function(x){ var o=document.createElement("option"); o.value=x.c; dl.appendChild(o); });
+    window.__prods = items; pintarCats();
   }
 
   /* Orden manual: intercambia el producto con el de al lado y guarda el
@@ -563,7 +634,7 @@
     editId = p.id; imgNueva = null;
     $("form-title").textContent = "Editar producto";
     $("nombre").value = p.nombre||""; $("precio").value = p.precio!=null ? pesos(p.precio) : "";
-    $("descripcion").value = p.descripcion||""; $("estado").value = p.estado||"Disponible"; $("categoria").value = p.categoria||"";
+    $("descripcion").value = p.descripcion||""; $("estado").value = p.estado||"Disponible"; pintarCats(); $("categoria").value = p.categoria||""; $("catNueva").hidden = true;
     setDrop(p.imagen);
     $("cancelar").hidden = false;
     window.scrollTo({top:0, behavior:"smooth"});
@@ -582,16 +653,15 @@
 
   function limpiar(){
     editId=null; imgNueva=null; $("form-title").textContent="Nuevo producto";
-    $("nombre").value=""; $("precio").value=""; $("descripcion").value=""; $("estado").value="Disponible"; $("categoria").value="";
+    $("nombre").value=""; $("precio").value=""; $("descripcion").value=""; $("estado").value="Disponible"; $("categoria").value=""; $("catNueva").hidden=true;
     setDrop(null); $("cancelar").hidden=true;
   }
 
   async function guardar(){
     var nombre = $("nombre").value.trim();
     if(!nombre){ toast("Poné un nombre"); return; }
-    var cat = $("categoria").value.trim().replace(/\s+/g," ");
-    // Respeta cómo ya está escrita la categoría ("ropa" → "Ropa" si ya existe)
-    categorias(todos).forEach(function(x){ if(x.c.toLowerCase()===cat.toLowerCase()) cat = x.c; });
+    var cat = $("categoria").value;
+    if(cat==="__nueva"){ toast("Agregá la categoría nueva o elegí otra"); return; }
     var p = { nombre:nombre, precio:numPrecio($("precio").value), descripcion:$("descripcion").value.trim(), estado:$("estado").value,
       categoria: cat || null };
     var btn = $("guardar"); btn.disabled=true; btn.textContent="Guardando…";
@@ -633,8 +703,19 @@
     $("gate").hidden = desbloqueado; $("panel").hidden = !desbloqueado;
     if(desbloqueado) pintarListado();
   }
+  /* "Cargar" no se muestra al público. Se entra con el link
+     catalogo-nahuel.onrender.com/#cargar; después de poner la clave una vez,
+     ese celu o compu recuerda y muestra el botón Cargar. */
+  var ADMIN_KEY = "nahuel_admin";
+  function esAdmin(){ try{ return localStorage.getItem(ADMIN_KEY)==="1"; }catch(e){ return false; } }
+  function verNav(){ $("nav").hidden = !(esAdmin() || location.hash==="#cargar"); }
+  function salir(){
+    try{ localStorage.removeItem(ADMIN_KEY); }catch(e){}
+    desbloqueado=false; if(location.hash) history.replaceState(null,"",location.pathname);
+    verNav(); mostrar("cat"); toast("Listo: este equipo ya no muestra Cargar");
+  }
   function entrar(){
-    if($("clave").value === CONFIG.CLAVE){ desbloqueado=true; $("gate").hidden=true; $("panel").hidden=false; pintarListado(); }
+    if($("clave").value === CONFIG.CLAVE){ desbloqueado=true; try{ localStorage.setItem(ADMIN_KEY,"1"); }catch(e){} verNav(); $("gate").hidden=true; $("panel").hidden=false; pintarListado(); }
     else toast("Clave incorrecta");
   }
 
@@ -646,6 +727,17 @@
 
   /* ---------- arranque ---------- */
   $("navCat").addEventListener("click", function(){ mostrar("cat"); });
+  $("categoria").addEventListener("change", function(){
+    var n = $("categoria").value==="__nueva"; $("catNueva").hidden = !n; if(n) $("catNuevaTxt").focus(); });
+  async function nuevaDesdeForm(){
+    var c = await agregarCat($("catNuevaTxt").value); if(!c) return;
+    $("catNuevaTxt").value=""; $("catNueva").hidden=true; pintarCats(); $("categoria").value = c; }
+  $("catNuevaOk").addEventListener("click", nuevaDesdeForm);
+  $("catNuevaTxt").addEventListener("keydown", function(e){ if(e.key==="Enter"){ e.preventDefault(); nuevaDesdeForm(); } });
+  async function nuevaDesdePanel(){
+    var c = await agregarCat($("catAdd").value); if(!c) return; $("catAdd").value=""; pintarCats(); }
+  $("catAddOk").addEventListener("click", nuevaDesdePanel);
+  $("catAdd").addEventListener("keydown", function(e){ if(e.key==="Enter"){ e.preventDefault(); nuevaDesdePanel(); } });
   ["fMin","fMax"].forEach(function(id){ $(id).addEventListener("input", pintarGrilla); });
   $("fOrden").addEventListener("change", pintarGrilla);
   $("fLimpiar").addEventListener("click", function(){ fCat=""; $("fMin").value=""; $("fMax").value=""; $("fOrden").value=""; pintarChips(); pintarGrilla(); });
@@ -656,6 +748,11 @@
   $("guardar").addEventListener("click", guardar);
   $("cancelar").addEventListener("click", limpiar);
   $("compartir").addEventListener("click", compartir);
+  $("salir").addEventListener("click", salir);
+  desbloqueado = esAdmin();   // en el equipo de Nahuel no vuelve a pedir la clave
+  verNav();
+  if(location.hash==="#cargar") abrirCarga();
+  addEventListener("hashchange", function(){ verNav(); if(location.hash==="#cargar") abrirCarga(); });
   $("file").addEventListener("change", onFile);
   $("tel").addEventListener("change", function(){ telGuardar($("tel").value); });
   $("tel").addEventListener("keydown", function(e){ if(e.key==="Enter"){ e.preventDefault(); $("tel").blur(); } });
@@ -664,7 +761,7 @@
     ? "Catálogo de Nahuel · publicado con Render + Supabase"
     : "Modo demo · los productos se guardan solo en este navegador. Conectá Supabase para compartir el catálogo.";
 
-  (async function(){ await sembrar(); await cargarTel(); $("tel").value = telActual(); await pintarCatalogo(); })();
+  (async function(){ await sembrar(); await cargarTel(); await cargarCats(); pintarCats(); $("tel").value = telActual(); await pintarCatalogo(); })();
 })();
 </script>
 </body>
