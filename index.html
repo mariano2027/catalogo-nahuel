@@ -220,6 +220,18 @@
   .foto.add{display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; border:1.5px dashed var(--line);
     color:var(--muted); font-size:12px; cursor:pointer; text-align:center; padding:6px}
   .foto.add b{font-size:22px; font-weight:400; line-height:1}
+  /* Solapas del panel y dólar */
+  .ptabs{display:flex; gap:4px; background:var(--bg); border:1px solid var(--line); border-radius:999px; padding:3px; width:max-content; margin:0 0 18px}
+  .ptabs button{font-family:var(--f-body); font-size:13px; font-weight:600; color:var(--muted); background:transparent; border:0; padding:7px 16px; border-radius:999px; cursor:pointer}
+  .ptabs button[aria-selected="true"]{background:var(--surface); color:var(--ink); box-shadow:var(--shadow)}
+  .dolar{max-width:520px}
+  .dolar .grande{display:flex; gap:10px; align-items:center}
+  .dolar .grande span{font-family:var(--f-head); font-weight:700; font-size:20px; color:var(--muted)}
+  .dolar .grande input{margin:0; font-family:var(--f-head); font-size:26px; font-weight:700; padding:12px 14px; font-variant-numeric:tabular-nums}
+  .dolar .ej{position:static; display:block; background:none; color:var(--muted); text-transform:none; letter-spacing:0; font-size:13px; font-weight:500; padding:0; margin-top:10px}
+  .dolar .ej b{color:var(--ink); font-variant-numeric:tabular-nums}
+  .eq{font-size:12.5px; color:var(--muted); margin:-8px 0 12px; font-variant-numeric:tabular-nums; min-height:1em}
+  .eq b{color:var(--accent)}
   .foot{margin-top:40px; padding-top:18px; border-top:1px solid var(--line); color:var(--muted); font-size:12.5px; text-align:center}
 </style>
 </head>
@@ -283,6 +295,26 @@
       <button class="btn primary" id="entrar">Entrar</button>
     </div>
 
+    <!-- solapas del panel -->
+    <div class="ptabs" id="ptabs" hidden>
+      <button id="tabProd" aria-selected="true">Productos</button>
+      <button id="tabDolar" aria-selected="false">Dólar</button>
+    </div>
+
+    <!-- dólar -->
+    <div class="form dolar" id="vDolar" hidden>
+      <h3>Valor del dólar</h3>
+      <div class="hint" style="margin-top:-6px">Los productos se cargan en dólares y el catálogo los muestra en pesos con este valor. Cambiás el dólar acá y se actualizan todos los precios solos.</div>
+      <label for="dolarIn">1 dólar =</label>
+      <div class="grande"><span>$</span><input id="dolarIn" type="text" inputmode="decimal" placeholder="Ej: 1.250" autocomplete="off"></div>
+      <button class="btn primary" id="dolarOk" style="margin-top:14px">Guardar dólar</button>
+      <span class="ej" id="dolarInfo"></span>
+      <div id="dolarConv" hidden style="margin-top:18px; padding-top:14px; border-top:1px solid var(--line)">
+        <div class="hint" id="dolarConvTxt" style="margin:0 0 10px"></div>
+        <button class="btn ghost" id="dolarConvOk" style="width:100%">Pasarlos a dólares</button>
+      </div>
+    </div>
+
     <!-- panel -->
     <div class="panel" id="panel" hidden>
       <div class="form">
@@ -301,15 +333,16 @@
         </div>
         <div class="row2">
           <div>
-            <label for="precio">Precio</label>
-            <input id="precio" type="text" inputmode="decimal" placeholder="$ 0">
+            <label for="precio">Precio en dólares</label>
+            <input id="precio" type="text" inputmode="decimal" placeholder="US$ 0">
           </div>
           <div>
-            <label for="precioAnt">Precio anterior</label>
+            <label for="precioAnt">Precio anterior (US$)</label>
             <input id="precioAnt" type="text" inputmode="decimal" placeholder="Opcional (oferta)">
           </div>
         </div>
-        <div class="hint" style="margin-top:-8px">Si ponés un precio anterior mayor, se muestra tachado con el % de descuento.</div>
+        <div class="eq" id="precioEq"></div>
+        <div class="hint" style="margin-top:-8px">El catálogo lo muestra en pesos con el dólar de la solapa Dólar. Si ponés un precio anterior mayor, se muestra tachado con el % de descuento.</div>
         <div>
           <div>
             <label for="estado">Estado</label>
@@ -407,6 +440,43 @@
       var w = waLink(null); $("cat-wa").href = w; $("waFloat").href = w;
     }catch(e){ console.log(e); toast("No se pudo guardar el WhatsApp"); }
   }
+  /* Dólar: los productos se cargan en dólares (precio_usd) y el catálogo
+     los muestra en pesos con el valor guardado en "ajustes" (clave "dolar",
+     texto JSON {v, f}). Cambiando el dólar cambian todos los precios. */
+  var DOLAR_KEY = "nahuel_dolar", dolar = {v:null, f:null};
+  var REDONDEO = 100;                 // los pesos se redondean hacia arriba a $ 100
+  async function cargarDolar(){
+    var v = "";
+    if(usaSupabase){
+      try{ var r = await sb.from("ajustes").select("valor").eq("clave","dolar").maybeSingle(); v = r.data && r.data.valor || ""; }catch(e){}
+    } else { try{ v = localStorage.getItem(DOLAR_KEY)||""; }catch(e){} }
+    try{ var d = JSON.parse(v||"{}"); dolar = {v: Number(d.v)>0 ? Number(d.v) : null, f: d.f||null}; }catch(e){ dolar = {v:null, f:null}; }
+  }
+  async function guardarDolar(v){
+    var d = JSON.stringify({v:v, f:new Date().toISOString()});
+    if(!usaSupabase){ try{ localStorage.setItem(DOLAR_KEY, d); }catch(e){} }
+    else{
+      var r = await sb.from("ajustes").upsert({clave:"dolar", valor:d}, {onConflict:"clave"});
+      if(r.error){ console.log(r.error); toast("No se pudo guardar el dólar"); return false; }
+    }
+    dolar = JSON.parse(d); return true;
+  }
+  function aPesos(usd){
+    if(usd==null || usd==="" || isNaN(usd) || !dolar.v) return null;
+    return Math.ceil(Number(usd)*dolar.v/REDONDEO)*REDONDEO;
+  }
+  function usd(v){ return "US$ "+Number(v).toLocaleString("es-AR",{maximumFractionDigits:2}); }
+  // Los que tienen precio en dólares pasan a pesos con el dólar de hoy. Los
+  // cargados antes en pesos (sin precio_usd) quedan como estaban.
+  function conDolar(items){
+    items.forEach(function(p){
+      if(p.precio_usd!=null && p.precio_usd!==""){ var a = aPesos(p.precio_usd); p.precio = a; }
+      if(p.precio_anterior_usd!=null && p.precio_anterior_usd!==""){ p.precio_anterior = aPesos(p.precio_anterior_usd); }
+      else if(p.precio_usd!=null && p.precio_usd!=="") p.precio_anterior = null;
+    });
+    return items;
+  }
+
   /* Lista de categorías: se guarda en "ajustes" (clave "categorias") como
      texto JSON. Las que ya usan los productos se suman solas. */
   var CATS_KEY = "nahuel_categorias", listaCats = [];
@@ -416,7 +486,12 @@
       try{ var r = await sb.from("ajustes").select("valor").eq("clave","categorias").maybeSingle(); v = r.data && r.data.valor || ""; }catch(e){}
     } else { try{ v = localStorage.getItem(CATS_KEY)||""; }catch(e){} }
     try{ listaCats = JSON.parse(v||"[]"); }catch(e){ listaCats = []; }
+    // Sin repetidas ni espacios de más («Celulares» y «celulares » son una).
+    var vistas = {};
+    listaCats = (Array.isArray(listaCats) ? listaCats : []).map(function(c){ return String(c||"").trim().replace(/\s+/g," "); })
+      .filter(function(c){ var k=c.toLowerCase(); if(!c || vistas[k]) return false; vistas[k]=1; return true; });
   }
+  function claveCat(c){ return String(c||"").trim().replace(/\s+/g," ").toLowerCase(); }
   async function guardarCats(){
     var v = JSON.stringify(listaCats);
     if(!usaSupabase){ try{ localStorage.setItem(CATS_KEY, v); }catch(e){} return true; }
@@ -425,25 +500,50 @@
     return true;
   }
   function todasCats(){
-    var m = {}; listaCats.forEach(function(c){ m[c.toLowerCase()] = c; });
-    (window.__prods||[]).forEach(function(p){ var c=(p.categoria||"").trim(); if(c && !m[c.toLowerCase()]) m[c.toLowerCase()] = c; });
+    var m = {}; listaCats.forEach(function(c){ m[claveCat(c)] = c; });
+    (window.__prods||[]).forEach(function(p){ var c=String(p.categoria||"").trim().replace(/\s+/g," "); if(c && !m[claveCat(c)]) m[claveCat(c)] = c; });
     return Object.keys(m).map(function(k){ return m[k]; }).sort(function(a,b){ return a.localeCompare(b,"es"); });
   }
   async function agregarCat(nombre){
     nombre = String(nombre||"").trim().replace(/\s+/g," ");
     if(!nombre) return null;
     nombre = nombre.charAt(0).toUpperCase()+nombre.slice(1);
-    var ya = todasCats().filter(function(c){ return c.toLowerCase()===nombre.toLowerCase(); })[0];
+    var ya = todasCats().filter(function(c){ return claveCat(c)===claveCat(nombre); })[0];
     if(ya){ if(listaCats.indexOf(ya)<0){ listaCats.push(ya); await guardarCats(); } return ya; }
     listaCats.push(nombre);
     if(!(await guardarCats())){ listaCats.pop(); return null; }
     toast("Categoría agregada"); return nombre;
   }
-  async function quitarCat(nombre){
-    var n = (window.__prods||[]).filter(function(p){ return (p.categoria||"")===nombre; }).length;
-    if(n){ toast("Tiene "+n+" producto"+(n>1?"s":"")+": cambiales la categoría antes de borrarla"); return; }
-    listaCats = listaCats.filter(function(c){ return c!==nombre; });
-    await guardarCats(); pintarCats(); pintarChips(); toast("Categoría borrada");
+  /* Borrar una categoría. Antes, si algún producto la tenía escrita apenas
+     distinto («celulares » o «CELULARES»), se borraba de la lista pero
+     volvía a aparecer sola (sale también de los productos). Ahora se
+     compara sin mayúsculas ni espacios y, si hay productos con esa
+     categoría, se avisa y con un segundo toque quedan «Sin categoría». */
+  var porBorrar = null;
+  async function quitarCat(nombre, boton){
+    var k = claveCat(nombre);
+    var prods = (window.__prods||[]).filter(function(p){ return claveCat(p.categoria)===k; });
+    if(prods.length && porBorrar!==k){
+      porBorrar = k; setTimeout(function(){ if(porBorrar===k){ porBorrar=null; pintarCats(); } }, 4000);
+      if(boton){ boton.parentNode.style.borderColor="var(--accent)"; boton.textContent="¿Seguro?"; }
+      toast("Tiene "+prods.length+" producto"+(prods.length>1?"s":"")+": tocá «¿Seguro?» y "+(prods.length>1?"quedan":"queda")+" sin categoría");
+      return;
+    }
+    porBorrar = null;
+    var antes = listaCats.slice();
+    listaCats = listaCats.filter(function(c){ return claveCat(c)!==k; });
+    if(!(await guardarCats())){ listaCats = antes; pintarCats(); return; }
+    try{
+      for(var i=0;i<prods.length;i++){
+        if(usaSupabase){ var r = await sb.from("productos").update({categoria:null}).eq("id",prods[i].id); if(r.error) throw r.error; }
+        else{ var a = store._read(); a.forEach(function(x){ if(x.id==prods[i].id) x.categoria=null; }); store._write(a); }
+        prods[i].categoria = null;
+      }
+    }catch(e){ console.log(e); toast("Se borró de la lista, pero no se pudo sacar de algún producto"); }
+    if(fCat && claveCat(fCat)===k) fCat = "";
+    if(prods.length){ await pintarListado(); await pintarCatalogo(); }
+    pintarCats(); pintarChips();
+    toast("Categoría borrada"+(prods.length?" · "+prods.length+" producto"+(prods.length>1?"s quedaron":" quedó")+" sin categoría":""));
   }
   function pintarCats(){
     var sel = $("categoria"), actual = sel.value, cats = todasCats();
@@ -456,7 +556,7 @@
     cats.forEach(function(c){
       var ch = document.createElement("span"); ch.className="chip";
       ch.innerHTML = esc(c)+'<button type="button" aria-label="Borrar '+esc(c)+'">✕</button>';
-      ch.querySelector("button").addEventListener("click", function(){ quitarCat(c); });
+      ch.querySelector("button").addEventListener("click", function(){ quitarCat(c, this); });
       box.appendChild(ch);
     });
   }
@@ -486,7 +586,10 @@
   }
   function numPrecio(txt){
     if(txt==null) return null;
-    var s = String(txt).replace(/[^\d,.-]/g,"").replace(/\./g,"").replace(",",".");
+    var t = String(txt).replace(/[^\d,.-]/g,"");
+    // «1.250» y «1.250,50» como se escribe acá; «12.5» o «12.50» (un punto y
+    // 1 o 2 cifras) es decimal, como lo pone el teclado numérico.
+    var s = (t.indexOf(",")<0 && /^-?\d+\.\d{1,2}$/.test(t)) ? t : t.replace(/\./g,"").replace(",",".");
     var n = parseFloat(s);
     return isNaN(n) ? null : n;
   }
@@ -557,10 +660,17 @@
     async setOrden(id, orden){ var a=this._read(); a.forEach(function(x){ if(x.id==id) x.orden=orden; }); this._write(a); }
   };
 
+  // Todo listado pasa los dólares a pesos con el dólar de hoy.
+  var listar = store.list;
+  store.list = async function(){ return conDolar(await listar.call(store)); };
+
   // Lo que se guarda de un producto. "imagen" queda como la foto principal
-  // (compatible con lo cargado antes) y "fotos" con todas, en orden.
+  // (compatible con lo cargado antes) y "fotos" con todas, en orden. Los
+  // precios van en dólares; en "precio" queda también el valor en pesos del
+  // día que se guardó (por si falta el dólar).
   function campos(p){
-    var c = {nombre:p.nombre, precio:p.precio, precio_anterior:p.precio_anterior, descripcion:p.descripcion,
+    var c = {nombre:p.nombre, precio_usd:p.precio_usd, precio_anterior_usd:p.precio_anterior_usd,
+      precio:aPesos(p.precio_usd), precio_anterior:aPesos(p.precio_anterior_usd), descripcion:p.descripcion,
       estado:p.estado, categoria:p.categoria, imagen:p.fotos[0]||"", fotos:p.fotos};
     if(p.orden!=null) c.orden = p.orden;
     return c;
@@ -757,7 +867,7 @@
         '<button data-down="'+i+'" aria-label="Bajar"'+(i===items.length-1?' disabled':'')+'>▼</button></div>'+
         (fotosDe(p)[0]?'<img src="'+fotosDe(p)[0]+'" alt="" loading="lazy" decoding="async">':'<div style="width:52px;height:52px;border-radius:8px;background:var(--bg)"></div>')+
         '<div class="info"><div class="n">'+esc(p.nombre||"Sin nombre")+'</div>'+
-        '<div class="p">'+((p.precio==null||p.precio==="")?"A consultar":pesos(p.precio))+' · '+esc(p.estado||"")+
+        '<div class="p">'+(p.precio_usd!=null&&p.precio_usd!==""?usd(p.precio_usd)+" → ":(p.precio!=null&&p.precio!==""?"en pesos · ":""))+((p.precio==null||p.precio==="")?"A consultar":pesos(p.precio))+' · '+esc(p.estado||"")+
         (p.categoria?' · '+esc(p.categoria):'')+'</div></div>'+
         '<div class="acts"><button class="iconbtn" data-ed="'+p.id+'">Editar</button>'+
         '<button class="iconbtn del" data-del="'+p.id+'">Borrar</button></div>';
@@ -789,8 +899,14 @@
     if(!p) return;
     editId = p.id; fotosForm = fotosDe(p).slice();
     $("form-title").textContent = "Editar producto";
-    $("nombre").value = p.nombre||""; $("precio").value = p.precio!=null ? pesos(p.precio) : "";
-    $("precioAnt").value = p.precio_anterior!=null && p.precio_anterior!=="" ? pesos(p.precio_anterior) : "";
+    // En dólares. Si se cargó antes en pesos, se propone el equivalente con el dólar de hoy.
+    var aUsd = function(u, ars){ if(u!=null && u!=="") return Number(u);
+      if(ars!=null && ars!=="" && dolar.v) return Math.round(Number(ars)/dolar.v*100)/100; return null; };
+    var pu = aUsd(p.precio_usd, p.precio), pa = aUsd(p.precio_anterior_usd, p.precio_anterior);
+    $("nombre").value = p.nombre||""; $("precio").value = pu!=null ? numTxt(pu) : "";
+    $("precioAnt").value = pa!=null ? numTxt(pa) : "";
+    if(p.precio_usd==null && p.precio!=null && p.precio!=="") toast(dolar.v ? "Estaba en pesos: lo pasé a dólares con el dólar de hoy" : "Estaba en pesos: cargá el precio en dólares");
+    verEq();
     $("descripcion").value = p.descripcion||""; $("estado").value = p.estado||"Disponible"; pintarCats(); $("categoria").value = p.categoria||""; $("catNueva").hidden = true;
     pintarFotos();
     $("cancelar").hidden = false;
@@ -826,7 +942,7 @@
 
   function limpiar(){
     editId=null; fotosForm=[]; $("form-title").textContent="Nuevo producto";
-    $("nombre").value=""; $("precio").value=""; $("precioAnt").value=""; $("descripcion").value=""; $("estado").value="Disponible"; $("categoria").value=""; $("catNueva").hidden=true;
+    $("nombre").value=""; $("precio").value=""; $("precioAnt").value=""; $("precioEq").textContent=""; $("descripcion").value=""; $("estado").value="Disponible"; $("categoria").value=""; $("catNueva").hidden=true;
     pintarFotos(); $("cancelar").hidden=true;
   }
 
@@ -836,7 +952,8 @@
     if(!fotosForm.length){ toast("Agregá al menos una foto"); return; }
     var cat = $("categoria").value;
     if(cat==="__nueva"){ toast("Agregá la categoría nueva o elegí otra"); return; }
-    var p = { nombre:nombre, precio:numPrecio($("precio").value), precio_anterior:numPrecio($("precioAnt").value),
+    if(!dolar.v && $("precio").value.trim()){ toast("Primero cargá el valor del dólar (solapa Dólar)"); return; }
+    var p = { nombre:nombre, precio_usd:numPrecio($("precio").value), precio_anterior_usd:numPrecio($("precioAnt").value),
       descripcion:$("descripcion").value.trim(), estado:$("estado").value, categoria: cat || null };
     var btn = $("guardar"); btn.disabled=true;
     try{
@@ -881,7 +998,7 @@
   var desbloqueado = false;
   function abrirCarga(){
     mostrar("load");
-    $("gate").hidden = desbloqueado; $("panel").hidden = !desbloqueado;
+    $("gate").hidden = desbloqueado; solapa(desbloqueado ? solapaActual : null);
     if(desbloqueado) pintarListado();
   }
   /* "Cargar" no se muestra al público. Se entra con el link
@@ -896,8 +1013,65 @@
     verNav(); mostrar("cat"); toast("Listo: este equipo ya no muestra Cargar");
   }
   function entrar(){
-    if($("clave").value === CONFIG.CLAVE){ desbloqueado=true; try{ localStorage.setItem(ADMIN_KEY,"1"); }catch(e){} verNav(); $("gate").hidden=true; $("panel").hidden=false; pintarListado(); }
+    if($("clave").value === CONFIG.CLAVE){ desbloqueado=true; try{ localStorage.setItem(ADMIN_KEY,"1"); }catch(e){} verNav(); $("gate").hidden=true; solapa(dolar.v ? "prod" : "dolar"); pintarListado(); }
     else toast("Clave incorrecta");
+  }
+
+  /* ---------- solapas del panel: Productos / Dólar ---------- */
+  var solapaActual = "prod";
+  function solapa(cual){
+    $("ptabs").hidden = !cual; $("panel").hidden = cual!=="prod"; $("vDolar").hidden = cual!=="dolar";
+    if(!cual) return;
+    solapaActual = cual;
+    $("tabProd").setAttribute("aria-selected", cual==="prod"?"true":"false");
+    $("tabDolar").setAttribute("aria-selected", cual==="dolar"?"true":"false");
+    if(cual==="dolar") pintarDolar();
+  }
+  function numTxt(n){ return Number(n).toLocaleString("es-AR",{maximumFractionDigits:2}); }
+  function fechaTxt(f){ try{ var d=new Date(f); return d.toLocaleDateString("es-AR")+" "+d.toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"}); }catch(e){ return ""; } }
+  function pintarDolar(){
+    $("dolarIn").value = dolar.v ? numTxt(dolar.v) : "";
+    var prods = window.__prods||[], enUsd = prods.filter(function(p){ return p.precio_usd!=null && p.precio_usd!==""; });
+    var ej = enUsd[0];
+    $("dolarInfo").innerHTML = dolar.v
+      ? 'Guardado: <b>$ '+numTxt(dolar.v)+'</b>'+(dolar.f?' · el '+fechaTxt(dolar.f):'')+' · '+enUsd.length+' producto'+(enUsd.length!==1?'s':'')+' en dólares'+
+        (ej?'<br>Ej.: '+esc(ej.nombre||"")+' · <b>'+usd(ej.precio_usd)+'</b> = <b>'+pesos(aPesos(ej.precio_usd))+'</b>':'')
+      : 'Todavía no hay dólar cargado.';
+    var enPesos = prods.filter(function(p){ return (p.precio_usd==null||p.precio_usd==="") && p.precio!=null && p.precio!==""; });
+    $("dolarConv").hidden = !(enPesos.length && dolar.v);
+    $("dolarConvTxt").textContent = enPesos.length+" producto"+(enPesos.length!==1?"s están":" está")+" cargado"+(enPesos.length!==1?"s":"")+" en pesos (de antes). Podés pasarlos a dólares con el dólar de hoy ($ "+numTxt(dolar.v||0)+"): desde ahí siguen al dólar como los demás.";
+  }
+  async function okDolar(){
+    var v = numPrecio($("dolarIn").value);
+    if(!(v>0)){ toast("Escribí el valor del dólar, ej: 1.250"); return; }
+    var b = $("dolarOk"); b.disabled = true;
+    if(await guardarDolar(v)){ toast("Dólar guardado: se actualizaron todos los precios"); await pintarListado(); await pintarCatalogo(); pintarDolar(); verEq(); }
+    b.disabled = false;
+  }
+  async function convertirPesos(){
+    var b = $("dolarConvOk");
+    if(b.textContent!=="¿Seguro? Tocá de nuevo"){ b.textContent="¿Seguro? Tocá de nuevo"; setTimeout(function(){ b.textContent="Pasarlos a dólares"; }, 3000); return; }
+    b.disabled = true; b.textContent = "Pasando…";
+    var prods = (window.__prods||[]).filter(function(p){ return (p.precio_usd==null||p.precio_usd==="") && p.precio!=null && p.precio!==""; });
+    var n = 0;
+    try{
+      for(var i=0;i<prods.length;i++){
+        var p = prods[i], u = Math.round(Number(p.precio)/dolar.v*100)/100;
+        var ua = p.precio_anterior!=null && p.precio_anterior!=="" ? Math.round(Number(p.precio_anterior)/dolar.v*100)/100 : null;
+        var cambio = {precio_usd:u, precio_anterior_usd:ua};
+        if(usaSupabase){ var r = await sb.from("productos").update(cambio).eq("id",p.id); if(r.error) throw r.error; }
+        else{ var a = store._read(); a.forEach(function(x){ if(x.id==p.id) Object.assign(x,cambio); }); store._write(a); }
+        n++;
+      }
+      toast(n+" producto"+(n!==1?"s pasados":" pasado")+" a dólares");
+    }catch(e){ console.log(e); toast("No se pudo: ¿se agregaron las columnas en Supabase?"); }
+    b.disabled = false; b.textContent = "Pasarlos a dólares";
+    await pintarListado(); await pintarCatalogo(); pintarDolar();
+  }
+  // Debajo del precio: cuánto queda en pesos con el dólar de hoy.
+  function verEq(){
+    var u = numPrecio($("precio").value);
+    $("precioEq").innerHTML = u==null ? "" : dolar.v ? 'En el catálogo: <b>'+pesos(aPesos(u))+'</b> (dólar $ '+numTxt(dolar.v)+')' : 'Falta cargar el dólar en la solapa Dólar';
   }
 
   async function compartir(){
@@ -938,6 +1112,12 @@
   if(location.hash==="#cargar") abrirCarga();
   addEventListener("hashchange", function(){ verNav(); if(location.hash==="#cargar") abrirCarga(); else abrirDesdeLink(); });
   $("file").addEventListener("change", onFile);
+  $("tabProd").addEventListener("click", function(){ solapa("prod"); });
+  $("tabDolar").addEventListener("click", function(){ solapa("dolar"); });
+  $("dolarOk").addEventListener("click", okDolar);
+  $("dolarIn").addEventListener("keydown", function(e){ if(e.key==="Enter"){ e.preventDefault(); okDolar(); } });
+  $("dolarConvOk").addEventListener("click", convertirPesos);
+  $("precio").addEventListener("input", verEq);
   $("tel").addEventListener("change", function(){ telGuardar($("tel").value); });
   $("tel").addEventListener("keydown", function(e){ if(e.key==="Enter"){ e.preventDefault(); $("tel").blur(); } });
 
@@ -945,7 +1125,7 @@
     ? "Argento · Catálogo"
     : "Modo demo · los productos se guardan solo en este navegador. Conectá Supabase para compartir el catálogo.";
 
-  (async function(){ await sembrar(); await cargarTel(); await cargarCats(); pintarCats(); $("tel").value = telActual(); pintarFotos(); await pintarCatalogo(); abrirDesdeLink(); })();
+  (async function(){ await sembrar(); await cargarDolar(); await cargarTel(); await cargarCats(); pintarCats(); $("tel").value = telActual(); pintarFotos(); await pintarCatalogo(); abrirDesdeLink(); })();
 })();
 </script>
 </body>
